@@ -3,5 +3,5 @@ Use for basic Nucleo Card (NUCLEO-F446RE) with dynamixel motor, motor of TurtleB
 Motor used for this project XM430-210T
 Motor used in robot TurtleBot3 Waffle model
 
-## 1. Download librairi files
+## 1. Download library files
 Just pick src and include files to put into your project and adjust the settings as you want
