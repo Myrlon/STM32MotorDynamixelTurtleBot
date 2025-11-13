@@ -53,17 +53,23 @@ UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
+char msg[64];
 int len;
-uint8_t rx_buf[32];
+volatile uint8_t rx[64];
 HAL_StatusTypeDef ret;
 HAL_StatusTypeDef rt;
 
-//Valeurs de position
+//Pos Values
 uint16_t CENTER = 2048;
 uint16_t FORWARD = 3072;
 uint16_t BACKWARD = 1024;
 uint16_t TURN = 256;
-
+uint8_t flag=0;
+HAL_StatusTypeDef st;
+int32_t current_velocity1 = 0;
+int32_t current_velocity2 = 0;
+int32_t pos1=0;
+int32_t pos2=0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -118,35 +124,69 @@ int main(void)
   MX_USART3_UART_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
+  HAL_UARTEx_ReceiveToIdle_IT(&huart1, rx, sizeof(rx));
   Dxl_Init(&huart1);
-  // Initialisation de base des 2 moteurs
+  HAL_StatusTypeDef status;
+  // Init Motors
   for (uint8_t id = 1; id <= 2; id++)
   {
     printf("Init moteur ID %u...\r\n", id);
     Dxl_Ping(id);
     HAL_Delay(10);
 
-    // Désactiver le torque pour changer de mode
-    Dxl_TorqueEnable(id, 0);
+    // Change position Mode
+    Dxl_SetOperatingMode(id, 1);
     HAL_Delay(10);
 
-    // Mettre en mode position
-    Dxl_SetOperatingMode(id, 3);
-    HAL_Delay(10);
-
-    // Définir une vitesse modérée
+    // Define speed
     Dxl_SetProfileVelocity(id, 100);
     HAL_Delay(10);
 
-    // Activer le torque
-    Dxl_TorqueEnable(id, 1);
-    HAL_Delay(20);
   }
 
-  printf("Moteurs prêts !\r\n");
+  HAL_Delay(2000);
+
+  // conversion rpm
+  //float rpm = current_velocity * 0.229f;
+
+//<Test Motor VEL>
 
 
+  printf("Motor ready !\r\n");
+  Dxl_MoveVel(1,150);
+  HAL_Delay(100);
+  Dxl_MoveVel(2, -70);
+  HAL_Delay(100);
+  Dxl_ReadVel(1, &current_velocity1);
+  Dxl_ReadVel(2, &current_velocity2);
+  HAL_Delay(3000);
 
+
+       //Reception UART
+    len= snprintf(msg,sizeof(msg), "Id1 Vit : %ld, Id2 Vit : %ld\r\n",current_velocity1, current_velocity2);
+      //Send speed data
+     HAL_UART_Transmit(&huart2, (uint8_t *)msg, len, HAL_MAX_DELAY);
+     Dxl_MoveVel(1,0);
+	 HAL_Delay(100);
+	 Dxl_MoveVel(2, 0);
+	 Dxl_ReadVel(1, &current_velocity1);
+	 Dxl_ReadVel(2, &current_velocity2);
+
+/*
+  //<Test Motor Pos>
+  Dxl_MovePos(1, FORWARD);
+  HAL_Delay(100);
+  Dxl_MovePos(2, FORWARD);
+  HAL_Delay(1500);
+  Dxl_ReadPresentPosition(1, &pos1);
+  Dxl_ReadPresentPosition(2, &pos2);
+  Dxl_MovePos(1, BACKWARD);
+    HAL_Delay(100);
+    Dxl_MovePos(2, BACKWARD);
+    HAL_Delay(1500);
+    Dxl_ReadPresentPosition(1, &pos1);
+    Dxl_ReadPresentPosition(2, &pos2);
+*/
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -154,53 +194,6 @@ int main(void)
   while (1)
   {
 
-	      printf("Avancer\r\n");
-	      Dxl_Move(1, FORWARD);
-	      HAL_Delay(100);
-	      Dxl_Move(2, FORWARD);
-	      HAL_Delay(3000);
-
-
-	      printf("Stop\r\n");
-	      Dxl_Move(1, CENTER);
-	      HAL_Delay(100);
-	      Dxl_Move(2, CENTER);
-	      HAL_Delay(2000);
-
-	      // Tourner à gauche
-	      printf("Tourner à gauche\r\n");
-	      Dxl_Move(1, BACKWARD - TURN);
-	      HAL_Delay(100);
-	      Dxl_Move(2, FORWARD + TURN);
-	      HAL_Delay(3000);
-
-	      // Stop
-	      printf("Centrer\r\n");
-	      Dxl_Move(1, CENTER);
-	      HAL_Delay(100);
-	      Dxl_Move(2, CENTER);
-	      HAL_Delay(2000);
-
-	      // Tourner à droite
-	      printf("Tourner à droite\r\n");
-	      Dxl_Move(1, FORWARD + TURN);
-	      HAL_Delay(100);
-	      Dxl_Move(2, BACKWARD - TURN);
-	      HAL_Delay(3000);
-
-	      // Reculer
-	      printf("Reculer\r\n");
-	      Dxl_Move(1, BACKWARD);
-	      HAL_Delay(100);
-	      Dxl_Move(2, BACKWARD);
-	      HAL_Delay(3000);
-
-
-	      printf("Retour neutre\r\n");
-	      Dxl_Move(1, CENTER);
-	      HAL_Delay(100);
-	      Dxl_Move(2, CENTER);
-	      HAL_Delay(2000);
 
     /* USER CODE END WHILE */
 
@@ -228,13 +221,7 @@ void SystemClock_Config(void)
   */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-  RCC_OscInitStruct.PLL.PLLM = 4;
-  RCC_OscInitStruct.PLL.PLLN = 84;
-  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
-  RCC_OscInitStruct.PLL.PLLQ = 2;
-  RCC_OscInitStruct.PLL.PLLR = 2;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -244,12 +231,12 @@ void SystemClock_Config(void)
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSE;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
   {
     Error_Handler();
   }
@@ -386,34 +373,10 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void parse_dxl_status(uint8_t *buf, int len)
-{
-    if (len < 10) return; // trop court
-
-    if (buf[0] != 0xFF || buf[1] != 0xFF || buf[2] != 0xFD) {
-    	HAL_UART_Transmit(&huart2, "inv\r\n", 8, HAL_MAX_DELAY);
-        return;
-    }
-
-    uint8_t id = buf[4];
-    uint16_t length = buf[5] | (buf[6] << 8);
-    uint8_t instruction = buf[7];
-    uint8_t error = buf[8];
-
-    printf("Dynamixel ID=%d, Len=%d, Instr=0x%02X, Err=0x%02X\r\n", id, length, instruction, error);
-
-    if (error != 0) {
-    	HAL_UART_Transmit(&huart2, "rer\r\n", 7, HAL_MAX_DELAY);
-        if (error & 0x01) HAL_UART_Transmit(&huart2, "ok1\r\n", 7, HAL_MAX_DELAY);
-        if (error & 0x02) HAL_UART_Transmit(&huart2, "ok2\r\n", 7, HAL_MAX_DELAY);
-        if (error & 0x04) HAL_UART_Transmit(&huart2, "ok3\r\n", 7, HAL_MAX_DELAY);
-        if (error & 0x08) HAL_UART_Transmit(&huart2, "ok3\r\n", 7, HAL_MAX_DELAY);
-        if (error & 0x10) HAL_UART_Transmit(&huart2, "ok4\r\n", 7, HAL_MAX_DELAY);
-        if (error & 0x20) HAL_UART_Transmit(&huart2, "ok5\r\n", 7, HAL_MAX_DELAY);
-        if (error & 0x40) HAL_UART_Transmit(&huart2, "ok6\r\n", 7, HAL_MAX_DELAY);
-        printf("\r\n");
-    }
+void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size){
+	HAL_UARTEx_ReceiveToIdle_IT(&huart1, rx, sizeof(rx));
 }
+
 /* USER CODE END 4 */
 
 /**

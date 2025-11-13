@@ -10,14 +10,20 @@
 #define INST_READ   0x02
 #define INST_WRITE  0x03
 
-/* XM430 control table (quelques adresses utiles) */
+/* XM430 control table  */
 #define ADDR_TORQUE_ENABLE     64   // 1 byte
+#define ADDR_PRESENT_TEMPERATURE     146   // 1 byte
 #define ADDR_BAUDRATE          8    // 1 byte
+#define ADDR_OPERATING_MODE  11  // 1 bytes
 #define ADDR_GOAL_POSITION     116  // 4 bytes
 #define ADDR_PRESENT_POSITION  132  // 4 bytes
 #define ADDR_GOAL_VELOCITY     104  // 4 bytes
 #define ADDR_PRESENT_VELOCITY  128  // 4 bytes
+#define ADDR_PROFILE_VELOCITY  112  // 4 bytes
 
+
+//Rx reading buffer
+extern volatile uint8_t rx[64];
 
 //CRC
 

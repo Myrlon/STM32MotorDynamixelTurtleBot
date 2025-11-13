@@ -3,8 +3,9 @@
 
 HAL_StatusTypeDef DXL_SendPacket(UART_HandleTypeDef *huart, uint8_t *packet, uint16_t length)
 {
+	HAL_HalfDuplex_EnableTransmitter(huart);
     HAL_StatusTypeDef st = HAL_UART_Transmit(huart, packet, length, HAL_MAX_DELAY);
-    HAL_Delay(2);
+    HAL_HalfDuplex_EnableReceiver(huart);
     return st;
 }
 
@@ -60,50 +61,115 @@ uint16_t DXL_UpdateCRC(uint16_t crc_accum, uint8_t *data_blk_ptr, uint16_t data_
   return crc_accum;
 }
 
+
 HAL_StatusTypeDef DXL_ReceivePacket(UART_HandleTypeDef *huart, uint8_t *rx_buf, uint16_t rx_buf_size, uint16_t *out_len, uint32_t timeout_ms)
 {
-    if (rx_buf_size < 16) return HAL_ERROR;
+	 if (rx_buf_size < 16) return HAL_ERROR;
+    uint32_t start = HAL_GetTick();
+        uint8_t hdr[7];
+        int hdr_got = 0;
+        HAL_StatusTypeDef st;
+        uint8_t b;
 
-    HAL_StatusTypeDef st;
-    uint16_t to_read = 7;
-    uint32_t t0 = HAL_GetTick();
-    uint16_t read = 0;
-    while (read < to_read)
-    {
-        st = HAL_UART_Receive(huart, rx_buf + read, to_read - read, timeout_ms);
-        if (st != HAL_OK)
+        // 1) Resynchronize: read bytes until we find header 0xFF 0xFF 0xFD 0x00
+        while ((HAL_GetTick() - start) < timeout_ms)
         {
-            return st;
+            st = HAL_UART_Receive_IT(huart, &b, 1);
+            if (st != HAL_OK) {
+                // no byte this 10ms slice -> continue until global timeout
+                continue;
+            }
+
+            // append to hdr buffer (sliding window)
+            if (hdr_got < 7) {
+                hdr[hdr_got++] = b;
+            } else {
+                // shift left 1 and append
+                memmove(hdr, hdr + 1, 6);
+                hdr[6] = b;
+            }
+
+            // check for header sequence at the end of hdr buffer
+            if (hdr_got >= 4) {
+                int idx = hdr_got - 4;
+                if (hdr[idx] == 0xFF && hdr[idx+1] == 0xFF && hdr[idx+2] == 0xFD && hdr[idx+3] == 0x00) {
+                    // Found header. Now ensure we have id,lenL,lenH in buffer (3 bytes after header)
+                    int avail_after_header = hdr_got - (idx + 4); // how many bytes we already have beyond header
+                    // Build rx_buf[0..6] = header(4) + id + lenL + lenH
+                    // first copy header bytes
+                    rx_buf[0] = 0xFF; rx_buf[1] = 0xFF; rx_buf[2] = 0xFD; rx_buf[3] = 0x00;
+
+                    int pos_in_hdr = idx + 4;
+                    int copied = 0;
+                    // copy available bytes after header from hdr buffer
+                    while (copied < avail_after_header && copied < 3) {
+                        rx_buf[4 + copied] = hdr[pos_in_hdr + copied];
+                        copied++;
+                    }
+
+                    // if not enough bytes for id/len, read the missing ones
+                    while (copied < 3) {
+                        uint32_t tsub = HAL_GetTick();
+                        // read one byte at a time, with small per-byte timeout to remain responsive
+                        if (HAL_UART_Receive(huart, &rx_buf[4 + copied], 1, 50) != HAL_OK) {
+                            // timeout for this byte -> overall failure
+                            return HAL_TIMEOUT;
+                        }
+                        copied++;
+                        // check overall timeout
+                        if ((HAL_GetTick() - start) >= timeout_ms) return HAL_TIMEOUT;
+                    }
+
+                    // now we have first 7 bytes in rx_buf[0..6]
+                    goto READ_REMAINING;
+                }
+            }
         }
-        read = to_read; // we requested full chunk above
-    }
 
-    // validate header quickly
-    if (!(rx_buf[0] == 0xFF && rx_buf[1] == 0xFF && rx_buf[2] == 0xFD && rx_buf[3] == 0x00))
-    {
-        return HAL_ERROR;
-    }
+        // global timeout while waiting header
+        return HAL_TIMEOUT;
 
-    uint16_t len_field = rx_buf[5] | (rx_buf[6] << 8);
-    uint16_t remain = (uint16_t)(len_field + 2);
-    if ((7 + remain) > rx_buf_size) return HAL_ERROR;
+    READ_REMAINING:
+        {
+            // rx_buf[5] = lenL, rx_buf[6] = lenH
+            uint16_t len_field = (uint16_t)rx_buf[5] | ((uint16_t)rx_buf[6] << 8);
+            // In protocol 2.0: len_field = (error(1) + params(n) + CRC(2))
+            // remaining bytes to read after the first 7 bytes = len_field
+            uint16_t remaining = len_field;
 
-    // read remaining bytes
-    read = 0;
-    while (read < remain)
-    {
-        st = HAL_UART_Receive(huart, rx_buf + 7 + read, remain - read, timeout_ms);
-        if (st != HAL_OK) return st;
-        read = remain;
-    }
+            // ensure buffer big enough: total = 7 + remaining
+            if ((uint32_t)7 + (uint32_t)remaining > rx_buf_size) return HAL_ERROR;
 
-    *out_len = (uint16_t)(7 + remain);
+            uint16_t idx = 7;
+            uint32_t tsub_start = HAL_GetTick();
+            while (remaining > 0) {
+                // read in chunks if desired, here we read byte-by-byte with small timeout to be robust
+                st = HAL_UART_Receive(huart, &rx_buf[idx], 1, 50);
+                if (st != HAL_OK) {
+                    // if per-byte timeout, check global timeout
+                    if ((HAL_GetTick() - start) >= timeout_ms) return HAL_TIMEOUT;
+                    // else try again
+                    continue;
+                }
+                idx++;
+                remaining--;
+                // protect against infinite loop
+                if ((HAL_GetTick() - start) >= timeout_ms) return HAL_TIMEOUT;
+            }
 
-    uint16_t crc_calc = DXL_UpdateCRC(0, rx_buf, *out_len - 2);
-    uint16_t crc_recv = rx_buf[*out_len - 2] | (rx_buf[*out_len - 1] << 8);
-    if (crc_calc != crc_recv) return HAL_ERROR;
+            uint16_t total_len = idx; // equals 7 + len_field
 
-    return HAL_OK;
+            // CRC verification: last two bytes are CRC (low, high)
+            if (total_len < 3) return HAL_ERROR;
+            uint16_t recv_crc = (uint16_t)rx_buf[total_len - 2] | ((uint16_t)rx_buf[total_len - 1] << 8);
+            uint16_t calc_crc = DXL_UpdateCRC(0, rx_buf, total_len - 2);
+            if (recv_crc != calc_crc) {
+                return HAL_ERROR;
+            }
+
+            *out_len = total_len;
+            return HAL_OK;
+        }
 }
 
 
@@ -177,13 +243,34 @@ HAL_StatusTypeDef DXL_Read(UART_HandleTypeDef *huart, uint8_t id, uint16_t addre
     HAL_StatusTypeDef st = DXL_SendPacket(huart, packet_full, 14);
     if (st != HAL_OK) return st;
 
+//check whats wrong to delete {
     // receive status packet
     uint8_t rxbuf[64];
+    //volatile uint8_t rx[64];
     uint16_t rxlen=0;
+    //new enable receiveing on half duplex pin !!
+   // HAL_HalfDuplex_EnableReceiver(huart);
     st = DXL_ReceivePacket(huart, rxbuf, sizeof(rxbuf), &rxlen, timeout_ms);
-    if (st != HAL_OK) return st;
+  //  HAL_HalfDuplex_EnableTransmitter(huart);
+//}
 
+  //check directly rx buffer from IT Receiver
 
+    if(rx[0]=='\0') return HAL_ERROR;
+
+    //rx version
+    uint16_t len_field = rx[5] | (rx[6] << 8);
+       uint16_t param_len = (len_field > 2) ? (len_field - 2) : 0;
+       if (param_len > read_len) param_len = read_len;
+       if (param_len)
+       {
+           memcpy(out_data, &rx[9], param_len);
+       }
+       *out_len = param_len;
+       return HAL_OK;
+    /*
+     * st version
+     * //  if (st != HAL_OK) return st;
     uint16_t len_field = rxbuf[5] | (rxbuf[6] << 8);
     uint16_t param_len = (len_field > 2) ? (len_field - 2) : 0;
     if (param_len > read_len) param_len = read_len;
@@ -192,5 +279,7 @@ HAL_StatusTypeDef DXL_Read(UART_HandleTypeDef *huart, uint8_t id, uint16_t addre
         memcpy(out_data, &rxbuf[9], param_len);
     }
     *out_len = param_len;
-    return HAL_OK;
+    return HAL_OK;*/
 }
+
+
