@@ -73,24 +73,7 @@ const osTimerAttr_t MotorTimer_attributes = {
   .name = "MotorTimer"
 };
 /* USER CODE BEGIN PV */
-char msg[64];
-int len;
-volatile uint8_t rx[64];
-uint8_t rx_buf[32];
-HAL_StatusTypeDef ret;
-HAL_StatusTypeDef rt;
 
-//Valeurs de position
-uint16_t CENTER = 2048;
-uint16_t FORWARD = 3072;
-uint16_t BACKWARD = 1024;
-uint16_t TURN = 256;
-uint8_t flag=0;
-HAL_StatusTypeDef st;
-int32_t current_velocity1 = 0;
-int32_t current_velocity2 = 0;
-int32_t pos1=0;
-int32_t pos2=0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -109,11 +92,7 @@ void MotorTimCallback(void *argument);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-int __io_putchar(int ch)
-{
-  HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
-  return ch;
-}
+
 /* USER CODE END 0 */
 
 /**
@@ -149,69 +128,7 @@ int main(void)
   MX_USART3_UART_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-  HAL_UARTEx_ReceiveToIdle_IT(&huart1, rx, sizeof(rx));
-  Dxl_Init(&huart1);
-  HAL_StatusTypeDef status;
-  // Init Motors
-  for (uint8_t id = 1; id <= 2; id++)
-  {
-    printf("Init moteur ID %u...\r\n", id);
-    Dxl_Ping(id);
-    HAL_Delay(10);
-
-    // Change position Mode
-    Dxl_SetOperatingMode(id, 3);
-    HAL_Delay(10);
-
-    // Define speed
-    Dxl_SetProfileVelocity(id, 10);
-    HAL_Delay(10);
-
-  }
-
-  HAL_Delay(2000);
-
-  // conversion rpm
-  //float rpm = current_velocity * 0.229f;
-
-//<Test Motor VEL>
-/*
-
-  printf("Moteurs prêts !\r\n");
-  Dxl_MoveVel(1,150);
-  HAL_Delay(100);
-  Dxl_MoveVel(2, -70);
-  HAL_Delay(100);
-  Dxl_ReadVel(1, &current_velocity1);
-  Dxl_ReadVel(2, &current_velocity2);
-  HAL_Delay(3000);
-
-
-       //Reception UART
-    len= snprintf(msg,sizeof(msg), "Id1 Vit : %ld, Id2 Vit : %ld\r\n",current_velocity1, current_velocity2);
-      //Envoie des données de vitesse
-     HAL_UART_Transmit(&huart2, (uint8_t *)msg, len, HAL_MAX_DELAY);
-     Dxl_MoveVel(1,0);
-	 HAL_Delay(100);
-	 Dxl_MoveVel(2, 0);
-	 Dxl_ReadVel(1, &current_velocity1);
-	 Dxl_ReadVel(2, &current_velocity2);
-*/
-
-  //<Test Motor Pos>
-  Dxl_MovePos(1, FORWARD);
-  HAL_Delay(100);
-  Dxl_MovePos(2, FORWARD);
-  HAL_Delay(1500);
-  Dxl_ReadPresentPosition(1, &pos1);
-  Dxl_ReadPresentPosition(2, &pos2);
-  Dxl_MovePos(1, BACKWARD);
-    HAL_Delay(100);
-    Dxl_MovePos(2, BACKWARD);
-    HAL_Delay(1500);
-    Dxl_ReadPresentPosition(1, &pos1);
-    Dxl_ReadPresentPosition(2, &pos2);
-
+ 
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -442,7 +359,6 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size){
-	//printf("bon");
 	HAL_UARTEx_ReceiveToIdle_IT(&huart1, rx, sizeof(rx));
 }
 
@@ -462,17 +378,7 @@ void MotorDTask(void *argument)
   /* Infinite loop */
   for(;;)
   {
-	 /* printf("Avancer\r\n");
-	  Dxl_Move(2, FORWARD);
-	  	  osDelay(2000);
-	  	  Dxl_Move(2, BACKWARD);
-	  	osDelay(2000);
-	  if(flag==1){
-		  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
-	  flag=0;
-	  }
-
-    osDelay(100);*/
+	 
   }
   /* USER CODE END 5 */
 }
@@ -490,10 +396,7 @@ void MotorGTask(void *argument)
   /* Infinite loop */
   for(;;)
   {
-	/* Dxl_Move(1, BACKWARD);
-	 		      osDelay(2000);
-	 		      Dxl_Move(1, FORWARD);
-	 		     osDelay(1000);*/
+	
   }
   /* USER CODE END MotorGTask */
 }
@@ -502,7 +405,6 @@ void MotorGTask(void *argument)
 void MotorTimCallback(void *argument)
 {
   /* USER CODE BEGIN MotorTimCallback */
-flag=1;
   /* USER CODE END MotorTimCallback */
 }
 
