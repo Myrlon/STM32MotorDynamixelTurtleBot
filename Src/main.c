@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "stdio.h"
 #include "dynamixel.h"
+#include "MPU6050.h"
 
 /* USER CODE END Includes */
 
@@ -48,14 +49,35 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+I2C_HandleTypeDef hi2c1;
+
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
+char msg[64];
+int len;
+volatile uint8_t rx[64];
+HAL_StatusTypeDef ret;
+HAL_StatusTypeDef rt;
 
+//Pos Values
+uint16_t CENTER = 2048;
+uint16_t FORWARD = 3072;
+uint16_t BACKWARD = 1024;
+uint16_t TURN = 256;
+uint8_t flag=0;
+HAL_StatusTypeDef st;
+int32_t current_velocity1 = 0;
+int32_t current_velocity2 = 0;
+int32_t pos1=0;
+int32_t pos2=0;
 
-
+//IMU MPU6050
+char buf[4];
+float Ax, Ay, Az;
+float Gx, Gy, Gz;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -64,13 +86,18 @@ static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_USART3_UART_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+int __io_putchar(int ch)
+{
+  HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
+  return ch;
+}
 /* USER CODE END 0 */
 
 /**
@@ -105,8 +132,77 @@ int main(void)
   MX_USART2_UART_Init();
   MX_USART3_UART_Init();
   MX_USART1_UART_Init();
+  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
+  HAL_UARTEx_ReceiveToIdle_IT(&huart1, rx, sizeof(rx));
+  Dxl_Init(&huart1);
+  MPU6050_init();
+  HAL_StatusTypeDef status;
+  // Init Motors
+  for (uint8_t id = 1; id <= 2; id++)
+  {
+    printf("Init moteur ID %u...\r\n", id);
+    st = Dxl_Ping(id);
+    if(st==HAL_OK){
+    	printf("ping ok : %d\r\n",id);
+    }
+    HAL_Delay(10);
 
+    // Change position Mode
+    Dxl_SetOperatingMode(id, 1);
+    HAL_Delay(10);
+
+    // Define speed
+    Dxl_SetProfileVelocity(id, 100);
+    HAL_Delay(10);
+
+  }
+
+  HAL_Delay(2000);
+
+  MPU6050_Read_Accel(&Ax, &Ay, &Az);
+  MPU6050_Read_Gyro(&Gx, &Gy, &Gz);
+  // conversion rpm
+  //float rpm = current_velocity * 0.229f;
+
+//<Test Motor VEL>
+
+/*
+  printf("Motor ready !\r\n");
+  Dxl_MoveVel(1,150);
+  HAL_Delay(100);
+  Dxl_MoveVel(2, -70);
+  HAL_Delay(100);
+  Dxl_ReadVel(1, &current_velocity1);
+  Dxl_ReadVel(2, &current_velocity2);
+  HAL_Delay(3000);
+
+
+       //Reception UART
+    len= snprintf(msg,sizeof(msg), "Id1 Vit : %ld, Id2 Vit : %ld\r\n",current_velocity1, current_velocity2);
+      //Send speed data
+     HAL_UART_Transmit(&huart2, (uint8_t *)msg, len, HAL_MAX_DELAY);
+     Dxl_MoveVel(1,0);
+	 HAL_Delay(100);
+	 Dxl_MoveVel(2, 0);
+	 Dxl_ReadVel(1, &current_velocity1);
+	 Dxl_ReadVel(2, &current_velocity2);
+*/
+/*
+  //<Test Motor Pos>
+  Dxl_MovePos(1, FORWARD);
+  HAL_Delay(100);
+  Dxl_MovePos(2, FORWARD);
+  HAL_Delay(1500);
+  Dxl_ReadPresentPosition(1, &pos1);
+  Dxl_ReadPresentPosition(2, &pos2);
+  Dxl_MovePos(1, BACKWARD);
+    HAL_Delay(100);
+    Dxl_MovePos(2, BACKWARD);
+    HAL_Delay(1500);
+    Dxl_ReadPresentPosition(1, &pos1);
+    Dxl_ReadPresentPosition(2, &pos2);
+*/
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -160,6 +256,40 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief I2C1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C1_Init(void)
+{
+
+  /* USER CODE BEGIN I2C1_Init 0 */
+
+  /* USER CODE END I2C1_Init 0 */
+
+  /* USER CODE BEGIN I2C1_Init 1 */
+
+  /* USER CODE END I2C1_Init 1 */
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.ClockSpeed = 100000;
+  hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
+  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C1_Init 2 */
+
+  /* USER CODE END I2C1_Init 2 */
+
 }
 
 /**
