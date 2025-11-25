@@ -34,13 +34,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-/*#define DXL_ID                1
-#define ADDR_TORQUE_ENABLE   64
-#define ADDR_GOAL_VELOCITY   104
-#define ADDR_GOAL_POSITION   116
-#define TORQUE_ENABLE        1
-#define BAUDRATE             1000000
-*/
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/

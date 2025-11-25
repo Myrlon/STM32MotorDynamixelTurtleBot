@@ -5,11 +5,18 @@ Motor used in robot TurtleBot3 Waffle model
 
 Theres a doc based on TurtleBOT3 with OpenCR and starting testing motors and a electronic assembly diagram
 
+Don't forget to change motor's baudrate as explained in the [Doc.pdf](https://github.com/Myrlon/STM32MotorDynamixelTurtleBot/blob/main/Doc.pdf)
+
 ## 1. Download library files
 Just pick src and include files to put into your project and adjust the settings as you want
 
 ## 2. Take The Release
 The release is a project example in STM32 for NUCLEO-F446RE, you can download it and test it
+
+
+Here how your files should look like :
+
+![architecture image files](./img/DossierSTMImage.png)
 
 Main Code
 
@@ -51,3 +58,4 @@ Move motor with position
   HAL_Delay(100);
   Dxl_MovePos(2, FORWARD);
   ```
+
