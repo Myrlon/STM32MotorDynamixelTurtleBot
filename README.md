@@ -1,6 +1,8 @@
 # Read the Doc !
 Read the [Doc.pdf](https://github.com/Myrlon/STM32MotorDynamixelTurtleBot/blob/main/Doc.pdf) in the files and follow the instructions to change baudrate and initialize motors and STM32 projects
 
+The second doc files is an help for the second part of the project for the TurtleBOT and build and work with the entire robot (SAETURTLEBOT3)
+
 # STM32MotorDynamixelTurtleBot
 Use for basic Nucleo Card (NUCLEO-F446RE) with dynamixel motor, motor of TurtleBot3
 Motor used for this project XM430-210T
